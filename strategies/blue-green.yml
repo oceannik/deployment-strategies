@@ -1,0 +1,86 @@
+---
+- name: Gather details about deployments from the master node
+  include_role:
+    name: gather_system_details
+  when: inventory_hostname in groups[INVENTORY_CONFIG.master_group_name]
+
+- name: Set the target environment for the deployment
+  set_fact:
+    target_environment: "{% if project_status.current_environment == 'blue' %}green{% else %}blue{% endif %}"
+
+- name: Check what hosts would be available for the deployment.
+  set_fact:
+    available_hosts: "{{ groups[INVENTORY_CONFIG.nodes_group_name] | reject('equalto', project_status['current_host']) | list }}"
+
+- debug:
+    var: available_hosts
+
+- name: Pick a random, unused host (only if deploying against more than one node)
+  set_fact:
+    target_host: "{{ (available_hosts or [groups[INVENTORY_CONFIG.nodes_group_name][0]]) | random }}"
+    master_host: "{{ groups[INVENTORY_CONFIG.master_group_name][0] }}"
+
+- name: Display details about the chosen target host and environment
+  debug:
+    var: "{{ item }}"
+  loop:
+    - project_status
+    - available_hosts
+    - target_environment
+    - target_host
+    - master_host
+
+- name: Set the prefix for created resources
+  set_fact:
+    resource_prefix: "oceannik_{{ project_name }}_{{ target_environment }}"
+    services_created: {}
+
+- name: Perform deploy actions only one the targeted host
+  when: inventory_hostname == target_host
+  block:
+    - name: Create container network for the targeted environment
+      include_role:
+        name: create_service_container_network
+
+    - name: Deploy each service defined in the Oceannik service configuration file
+      include_role:
+        name: deploy_service
+      loop: "{{ OCEANNIK.services | dict2items }}"
+      loop_control:
+        loop_var: service_dict_obj
+
+- name: Display details about created services
+  debug:
+    var: "{{ item }}"
+  loop:
+    - services_created
+
+- set_fact:
+    new_project_status_combine_with:
+      current_environment: "{{ target_environment }}"
+      current_host: "{{ target_host }}"
+
+    new_project_status_combine_environments_with:
+      host: "{{ target_host }}"
+      services: "{{ services_created }}"
+
+- set_fact:
+    new_project_status: "{{ project_status | combine(new_project_status_combine_with) }}"
+
+- set_fact:
+    new_project_status: "{{ new_project_status
+      | combine({'environments': (
+        new_project_status['environments'] | combine({target_environment: new_project_status_combine_environments_with})
+      )}) }}"
+
+- debug:
+    var: new_project_status
+
+- name: Save project status file
+  delegate_to: "{{ master_host }}"
+  copy:
+    content: "{{ new_project_status | to_yaml }}"
+    dest: "{{ project_status_file_path }}"
+    owner: "{{ deployment_user_obj.uid }}"
+    group: "{{ deployment_user_obj.uid }}"
+  become: yes

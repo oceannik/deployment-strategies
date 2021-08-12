@@ -1,0 +1,92 @@
+---
+- name: Setup the system
+  hosts: oceannik_master, oceannik_nodes
+  gather_facts: yes
+  become: true
+
+  pre_tasks:
+    - name: Update apt cache if needed
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      ignore_errors: yes
+
+  vars_files:
+    - vars/schema.yml
+    - vars/main.yml
+
+  tasks:
+    - name: Configure groups, users and directories.
+      tags: "deployments-user"
+      block:
+        - name: Add groups for Oceannik
+          group:
+            name: "{{ item }}"
+            state: present
+          with_items:
+            - oceannik
+            - sudo
+
+        - name: Fetch or create default app owner
+          user:
+            name: '{{ default_app_owner }}'
+            state: present
+            group: oceannik
+            groups: oceannik
+            create_home: yes
+          register: deployment_user
+
+        - name: Create directory for storing project files
+          file:
+            path: '{{ item }}'
+            state: directory
+            owner: '{{ deployment_user.uid }}'
+            group: '{{ deployment_user.uid }}'
+          with_items:
+            - '/home/{{ default_app_owner }}/projects'
+            - '/home/{{ default_app_owner }}/containers'
+            - '/home/{{ default_app_owner }}/backups'
+
+    # - name: Configure the service user.
+    #   tags: "service-user"
+    #   block:
+    #     - name: Add a service user.
+    #       user:
+    #         name: "{{ service_user_username }}"
+    #         state: present
+
+    #     - name: Copy SSH Key for authentication
+    #       authorized_key:
+    #         user: "{{ service_user_username }}"
+    #         state: present
+    #         key: "{{ lookup('file', ssh_public_key_path) }}"
+
+    - name: Set up the firewall
+      tags: "ufw"
+      block:
+        - name: Install ufw
+          apt:
+            name: ufw
+            state: present
+
+        - name: Allow traffic on selected ports
+          ufw:
+            rule: "{{ item.rule }}"
+            port: "{{ item.port }}"
+            proto: "{{ item.proto }}"
+          with_items:
+            - { rule: 'allow', port: 22, proto: 'tcp' }
+            - { rule: 'allow', port: 80, proto: 'tcp' }
+            - { rule: 'allow', port: 443, proto: 'tcp' }
+            - { rule: 'allow', port: 123, proto: 'udp' }
+            - { rule: 'allow', port: "{{ agent_server_default_port }}", proto: 'tcp' }
+
+        - name: Configure default rules for the firewall
+          ufw:
+            direction: "{{ item.direction }}"
+            policy: "{{ item.policy }}"
+            state: enabled
+          with_items:
+            - { direction: outgoing, policy: allow }
+            - { direction: incoming, policy: deny }
+      when: inventory_hostname in groups[INVENTORY_CONFIG.master_group_name]

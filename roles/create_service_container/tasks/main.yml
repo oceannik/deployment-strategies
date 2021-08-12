@@ -1,0 +1,48 @@
+---
+- set_fact:
+    service_container_name: "{{ resource_prefix }}_{{ service_name }}"
+    service_container_oceannik_injected_env:
+      "OCEANNIK_DEPLOYMENT_ENVIRONMENT": "{{ target_environment | string }}"
+      "OCEANNIK_DEBUG_PARAMS": '{"OCEANNIK_DEPLOYMENT_STRATEGY": "{{ OCEANNIK_DEPLOYMENT_STRATEGY | string }}"}'
+
+- name: Stop the container if it already exists
+  docker_container:
+    name: '{{ service_container_name }}'
+    state: absent
+  become: yes
+
+- name: Start containers
+  docker_container:
+    name: "{{ service_container_name }}"
+    image: "{{ service_config['container']['image'] }}"
+    pull: yes
+    state: started
+    restart: yes
+    restart_policy: unless-stopped
+    command: "{{ service_config['container']['command'] | default() }}"
+    ports: "{{ service_config['container']['ports'] | default([]) }}"
+    networks:
+      - name: '{{ service_container_network_name }}'
+    purge_networks: yes
+    env: "{{ (service_config['container']['env'] | default({})) | combine(service_container_oceannik_injected_env) }}"
+    volumes: "{{ service_config['container']['volumes'] | default([]) }}"
+    links: "{{ service_config['container']['links'] | default([]) }}"
+  register: service_container_inspection
+  become: yes
+
+- set_fact:
+    service_container_inspection_ports_config: "{{ service_container_inspection.ansible_facts.docker_container['NetworkSettings']['Ports'] }}"
+
+- name: Display port bindings for the created service container
+  debug:
+    var: service_container_inspection_ports_config
+
+- set_fact:
+    service_container_inspection_partial_config:
+      "ports": "{{ service_container_inspection_ports_config }}"
+
+- set_fact:
+    services_created: "{{ services_created | combine({service_name: service_container_inspection_partial_config}) }}"
+
+- debug:
+    var: services_created

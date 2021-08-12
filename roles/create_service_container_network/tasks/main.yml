@@ -1,0 +1,14 @@
+---
+- set_fact:
+    service_container_network_name: "{{ resource_prefix }}_network"
+
+- name: Display the new network name
+  debug:
+    var: service_container_network_name
+
+- name: Recreate the service container network
+  docker_network:
+    name: "{{ service_container_network_name }}"
+    state: present
+    force: yes
+  become: yes

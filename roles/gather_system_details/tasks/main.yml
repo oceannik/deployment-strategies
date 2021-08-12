@@ -1,0 +1,44 @@
+---
+- name: Display directories to check for
+  debug:
+    var: "{{ item }}"
+  loop:
+    - projects_root_dir
+    - project_dir
+
+- name: Check that required directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: '{{ deployment_user_obj.uid }}'
+    group: '{{ deployment_user_obj.uid }}'
+  loop:
+    - "{{ projects_root_dir }}"
+    - "{{ project_dir }}"
+  become: yes
+
+- set_fact:
+    project_status_file_path: "{{ project_dir }}/{{ project_status_file_name }}"
+
+- name: Attempt to check the status file for the project
+  stat:
+    path: "{{ project_status_file_path }}"
+  register: project_status_file
+
+- name: (if file exists) Read the contents of the file
+  command: "cat {{ project_status_file_path }}"
+  register: project_status_file_output_text
+  when: project_status_file.stat.exists
+
+- name: (if file exists) save the contents of the file to project_status
+  set_fact:
+    project_status: "{{ project_status_file_output_text.stdout | from_yaml }}"
+  when: project_status_file.stat.exists
+
+- name: (if the file does not exist) Assume a fresh deployment
+  set_fact:
+    project_status: "{{ PROJECT_STATUS_FRESH_FILE }}"
+  when: not project_status_file.stat.exists
+
+- debug:
+    var: project_status

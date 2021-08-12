@@ -1,0 +1,4 @@
+---
+- name: Print debug message
+  ansible.builtin.debug:
+    msg: This is a placeholder Deployment Strategy for debugging

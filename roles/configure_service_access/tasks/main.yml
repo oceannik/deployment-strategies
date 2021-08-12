@@ -1,0 +1,29 @@
+---
+- name: Disable nginx default site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- set_fact:
+    container_port: "{{ service_config['publish']['container_port'] }}/tcp"
+
+- name: Create nginx configuration for the service
+  template:
+    src: "{{ nginx_service_config_template }}"
+    dest: "{{ nginx_sites_available_path }}"
+    owner: "{{ deployment_user_obj.uid }}"
+    group: "{{ deployment_user_obj.uid }}"
+    lstrip_blocks : true
+  vars:
+    service_container_upstream_name: "{{ resource_prefix }}_{{ service_name }}_container_upstream"
+    service_container_host_port: "{{ services_created[service_name]['ports'][container_port][0]['HostPort'] }}"
+    tls_enabled: "{{ service_config['publish']['tls']['enabled'] | default(true) }}"
+
+- name: Enable the nginx site by creating a symbolic link
+  file:
+    src: "{{ nginx_sites_available_path }}"
+    dest: "{{ nginx_sites_enabled_path }}"
+    state: link
+
+- name: Verify created nginx config is valid
+  shell: nginx -t

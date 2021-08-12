@@ -1,0 +1,15 @@
+---
+INVENTORY_CONFIG:
+  master_group_name: oceannik_master
+  nodes_group_name: oceannik_nodes
+
+PROJECT_STATUS_FRESH_FILE:
+  current_environment:
+  current_host:
+  environments:
+    blue:
+      host:
+      services: {}
+    green:
+      host:
+      services: {}

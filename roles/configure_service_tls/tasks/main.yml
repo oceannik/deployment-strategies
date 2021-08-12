@@ -1,0 +1,59 @@
+---
+- set_fact:
+    service_domain: "{{ service_config['publish']['domain'] }}"
+    certs_notifications_email_address: "{{ service_config['publish']['certs']['notify'] | default('certs-tests@public.oceannik.com') }}"
+
+- name: Make sure certbot was not installed via apt
+  apt:
+    name: certbot
+    state: absent
+  become: yes
+
+- name: Install snap
+  apt:
+    name: snapd
+    state: present
+  become: yes
+
+- name: Install core via snap
+  community.general.snap:
+    name: core
+    state: present
+  become: yes
+
+- name: Install certbot
+  community.general.snap:
+    name: certbot
+    state: present
+    classic: yes
+  become: yes
+
+- name: Link the certbot binary
+  file:
+    src: /snap/bin/certbot
+    dest: /usr/bin/certbot
+    state: link
+
+- name: Check existing certificates for the domain
+  shell: |
+    certbot certificates \
+      -d {{ service_domain }} | grep {{ service_domain }}
+  ignore_errors: yes
+  become: yes
+  register: certbot_certificate_check
+
+- name: Renew existing certificates for the domain
+  shell: |
+    certbot renew --cert-name {{ service_domain }}
+  become: yes
+
+- name: Run certbot
+  shell: |
+    certbot \
+      -n -d {{ service_domain }} \
+      --nginx \
+      --email {{ certs_notifications_email_address }} \
+      --no-eff-email \
+      --agree-tos
+  become: yes
+  when: certbot_certificate_check is failed

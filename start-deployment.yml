@@ -1,0 +1,55 @@
+---
+- name: Start deployment
+  hosts: oceannik_master, oceannik_nodes
+  gather_facts: yes
+
+  vars_files:
+    - vars/schema.yml
+    - vars/main.yml
+
+  vars:
+    OCEANNIK_SERVICE_CONFIG_PATH: "{{ lookup('env', 'OCEANNIK_SERVICE_CONFIG_PATH') or 'user-provided/oceannik.yml' }}"
+    OCEANNIK_DEPLOYMENT_STRATEGY: "{{ lookup('env', 'OCEANNIK_DEPLOYMENT_STRATEGY') or 'blue-green' }}"
+    OCEANNIK_PROJECT_ID: "{{ lookup('env', 'OCEANNIK_PROJECT_ID') or '0' }}"
+    OCEANNIK_PROJECT_NAME: "{{ lookup('env', 'OCEANNIK_PROJECT_NAME') or 'undefined-project' }}"
+    project_name: "{{ OCEANNIK_PROJECT_ID }}.{{ OCEANNIK_PROJECT_NAME }}"
+    project_dir: "{{ projects_root_dir }}/{{ project_name }}"
+
+  tasks:
+    - name: Display Oceannik settings
+      debug:
+        var: "{{ item }}"
+      loop:
+        - OCEANNIK_SERVICE_CONFIG_PATH
+        - OCEANNIK_DEPLOYMENT_STRATEGY
+        - OCEANNIK_PROJECT_ID
+        - OCEANNIK_PROJECT_NAME
+
+    - name: Check if an Oceannik service configuration file exists
+      local_action:
+        module: stat
+        path: "{{ OCEANNIK_SERVICE_CONFIG_PATH }}"
+      register: service_config_path
+
+    - name: Include the service configuration under the OCEANNIK variable
+      include_vars:
+        file: "{{ OCEANNIK_SERVICE_CONFIG_PATH }}"
+        name: OCEANNIK
+      when: service_config_path.stat.exists
+
+    - name: Fail the playbook if service configuration is not given
+      fail:
+        msg: >
+          Please provide a path to the `oceannik.yml` service configuration file using the OCEANNIK_SERVICE_CONFIG_PATH
+          environment variable, or put the file directly in the `user-provided/` directory.
+      when: not service_config_path.stat.exists
+
+    - name: Display imported Oceannik service configuration file
+      debug:
+        var: OCEANNIK
+
+    - name: Preconfigure the hosts
+      include_role:
+        name: preconfigure_hosts
+
+    - import_tasks: strategies/{{ OCEANNIK_DEPLOYMENT_STRATEGY }}.yml

@@ -1,0 +1,4 @@
+---
+nginx_service_config_template: 'nginx-service.conf.j2'
+nginx_sites_available_path: '/etc/nginx/sites-available/{{ resource_prefix }}_{{ service_domain }}.conf'
+nginx_sites_enabled_path: '/etc/nginx/sites-enabled/{{ service_domain }}.conf'

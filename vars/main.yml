@@ -1,0 +1,9 @@
+---
+deployment_user_name: oceannik
+agent_server_default_port: 5050
+
+projects_root_dir: "/home/{{ deployment_user_name }}/projects"
+containers_root_dir: "/home/{{ deployment_user_name }}/containers"
+backups_root_dir: "/home/{{ deployment_user_name }}/backups"
+
+project_status_file_name: "status.yml"

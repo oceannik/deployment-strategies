@@ -1,0 +1,39 @@
+---
+- set_fact:
+    service_name: "{{ service_dict_obj.key }}"
+    service_config: "{{ service_dict_obj.value }}"
+
+- name: Display details about the deployed service
+  debug:
+    var: "{{ item }}"
+  loop:
+    - service_name
+    - service_config
+
+- name: Create container for the service
+  include_role:
+    name: create_service_container
+  when: service_config['container'] is defined
+
+- name: Configure SSL certificates for the service
+  include_role:
+    name: configure_service_tls
+    apply:
+      delegate_to: "{{ master_host }}"
+      become: yes
+  when: service_config['publish'] is defined
+
+- name: Configure HTTP access for the service
+  include_role:
+    name: configure_service_access
+    apply:
+      delegate_to: "{{ master_host }}"
+      become: yes
+  when: service_config['publish'] is defined
+
+- name: Restart nginx to apply new service config changes
+  service:
+    name: nginx
+    state: restarted
+  delegate_to: "{{ master_host }}"
+  become: yes
