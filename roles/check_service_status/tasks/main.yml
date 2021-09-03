@@ -1,0 +1,14 @@
+---
+- set_fact:
+    service_container_host_port: "{{ hostvars[master_host]['services_created'][service_name]['ports'][container_port][0]['HostPort'] }}"
+
+- name: Get a response from the published service container
+  uri:
+    url: "http://{{ target_host }}:{{ service_container_host_port }}"
+    method: GET
+  register: service_container_response_check
+  until: service_container_response_check.status == 200
+  # 5 x 6 = 30 seconds total
+  delay: 5
+  retries: 6
+

@@ -1,6 +1,6 @@
 ---
 deployment_user_name: oceannik
-agent_server_default_port: 5050
+agent_server_default_port: 5000
 
 projects_root_dir: "/home/{{ deployment_user_name }}/projects"
 containers_root_dir: "/home/{{ deployment_user_name }}/containers"

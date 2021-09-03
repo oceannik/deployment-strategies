@@ -46,14 +46,26 @@
   shell: |
     certbot renew --cert-name {{ service_domain }}
   become: yes
+  when: not certbot_certificate_check is failed
 
-- name: Run certbot
-  shell: |
-    certbot \
-      -n -d {{ service_domain }} \
-      --nginx \
-      --email {{ certs_notifications_email_address }} \
-      --no-eff-email \
-      --agree-tos
-  become: yes
+- name: Obtain new certificates
   when: certbot_certificate_check is failed
+  block:
+    - name: Configure HTTP access for the service
+      include_role:
+        name: configure_service_access
+        apply:
+          delegate_to: "{{ master_host }}"
+          become: yes
+      vars:
+        service_tls_enabled: false
+
+    - name: Run certbot
+      shell: |
+        certbot \
+          -n -d {{ service_domain }} \
+          --nginx \
+          --email {{ certs_notifications_email_address }} \
+          --no-eff-email \
+          --agree-tos
+      become: yes

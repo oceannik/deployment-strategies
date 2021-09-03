@@ -1,7 +1,7 @@
 ---
 INVENTORY_CONFIG:
   master_group_name: oceannik_master
-  nodes_group_name: oceannik_nodes
+  workers_group_name: oceannik_workers
 
 PROJECT_STATUS_FRESH_FILE:
   current_environment:

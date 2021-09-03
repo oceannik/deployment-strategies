@@ -15,21 +15,32 @@
     name: create_service_container
   when: service_config['container'] is defined
 
-- name: Configure SSL certificates for the service
-  include_role:
-    name: configure_service_tls
-    apply:
-      delegate_to: "{{ master_host }}"
-      become: yes
+- name: Publish the service
   when: service_config['publish'] is defined
+  block:
+    - set_fact:
+        service_tls_enabled: "{{ (service_config['publish']['tls']['enabled'] | default(false)) | bool }}"
 
-- name: Configure HTTP access for the service
-  include_role:
-    name: configure_service_access
-    apply:
-      delegate_to: "{{ master_host }}"
-      become: yes
-  when: service_config['publish'] is defined
+    - name: Configure SSL certificates for the service
+      include_role:
+        name: configure_service_tls
+        apply:
+          delegate_to: "{{ master_host }}"
+          become: yes
+      when: service_tls_enabled
+
+    - name: Configure HTTP/HTTPS access for the service
+      include_role:
+        name: configure_service_access
+        apply:
+          delegate_to: "{{ master_host }}"
+          become: yes
+
+    - name: Check whether the service container is active
+      include_role:
+        name: check_service_status
+        apply:
+          delegate_to: "{{ master_host }}"
 
 - name: Restart nginx to apply new service config changes
   service:

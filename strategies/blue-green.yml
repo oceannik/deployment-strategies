@@ -2,40 +2,53 @@
 - name: Gather details about deployments from the master node
   include_role:
     name: gather_system_details
-  when: inventory_hostname in groups[INVENTORY_CONFIG.master_group_name]
+  when: inventory_hostname == master_host
 
-- name: Set the target environment for the deployment
+- name: (master host) Set common vars used for the deployments
+  delegate_to: "{{ master_host }}"
+  delegate_facts: true
+  when: inventory_hostname == master_host
+  block:
+    - name: Set the target environment for the deployment
+      set_fact:
+        target_environment: "{% if hostvars[master_host]['project_status']['current_environment'] == 'blue' %}green{% else %}blue{% endif %}"
+
+    - name: Check what hosts would be available for the deployment.
+      set_fact:
+        available_hosts: "{{ groups[INVENTORY_CONFIG.workers_group_name] | reject('equalto', hostvars[master_host]['project_status']['current_host']) | list }}"
+
+    - debug:
+        var: hostvars[master_host]['available_hosts']
+
+    - name: Pick a random, unused host (only if deploying against more than one node)
+      set_fact:
+        target_host: "{{ (hostvars[master_host]['available_hosts'] or [groups[INVENTORY_CONFIG.workers_group_name][0]]) | random }}"
+
+    - name: Display details about the chosen target host and environment
+      debug:
+        var: "{{ hostvars[master_host][item] }}"
+      loop:
+        - project_status
+        - available_hosts
+        - target_environment
+        - target_host
+        - master_host
+
+    - name: Set the prefix for created resources
+      set_fact:
+        resource_prefix: "oceannik_{{ project_name }}_{{ hostvars[master_host]['target_environment'] }}"
+        services_created: {}
+
+- name: Delegate selected vars to all hosts
   set_fact:
-    target_environment: "{% if project_status.current_environment == 'blue' %}green{% else %}blue{% endif %}"
+    target_host: "{{ hostvars[master_host]['target_host'] }}"
+    target_environment: "{{ hostvars[master_host]['target_environment'] }}"
+    resource_prefix: "{{ hostvars[master_host]['resource_prefix'] }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['all'] }}"
 
-- name: Check what hosts would be available for the deployment.
-  set_fact:
-    available_hosts: "{{ groups[INVENTORY_CONFIG.nodes_group_name] | reject('equalto', project_status['current_host']) | list }}"
-
-- debug:
-    var: available_hosts
-
-- name: Pick a random, unused host (only if deploying against more than one node)
-  set_fact:
-    target_host: "{{ (available_hosts or [groups[INVENTORY_CONFIG.nodes_group_name][0]]) | random }}"
-    master_host: "{{ groups[INVENTORY_CONFIG.master_group_name][0] }}"
-
-- name: Display details about the chosen target host and environment
-  debug:
-    var: "{{ item }}"
-  loop:
-    - project_status
-    - available_hosts
-    - target_environment
-    - target_host
-    - master_host
-
-- name: Set the prefix for created resources
-  set_fact:
-    resource_prefix: "oceannik_{{ project_name }}_{{ target_environment }}"
-    services_created: {}
-
-- name: Perform deploy actions only one the targeted host
+- name: (target host) Perform deploy actions only one the targeted host
   when: inventory_hostname == target_host
   block:
     - name: Create container network for the targeted environment
@@ -49,38 +62,42 @@
       loop_control:
         loop_var: service_dict_obj
 
-- name: Display details about created services
-  debug:
-    var: "{{ item }}"
-  loop:
-    - services_created
+    - name: Display details about created services
+      debug:
+        var: "{{ item }}"
+      loop:
+        - hostvars[master_host]['services_created']
 
-- set_fact:
-    new_project_status_combine_with:
-      current_environment: "{{ target_environment }}"
-      current_host: "{{ target_host }}"
-
-    new_project_status_combine_environments_with:
-      host: "{{ target_host }}"
-      services: "{{ services_created }}"
-
-- set_fact:
-    new_project_status: "{{ project_status | combine(new_project_status_combine_with) }}"
-
-- set_fact:
-    new_project_status: "{{ new_project_status
-      | combine({'environments': (
-        new_project_status['environments'] | combine({target_environment: new_project_status_combine_environments_with})
-      )}) }}"
-
-- debug:
-    var: new_project_status
-
-- name: Save project status file
+- name: (master host) Finish the deployment by setting vars and the project status file
   delegate_to: "{{ master_host }}"
-  copy:
-    content: "{{ new_project_status | to_yaml }}"
-    dest: "{{ project_status_file_path }}"
-    owner: "{{ deployment_user_obj.uid }}"
-    group: "{{ deployment_user_obj.uid }}"
-  become: yes
+  delegate_facts: true
+  when: inventory_hostname == master_host
+  block:
+    - set_fact:
+        new_project_status_combine_with:
+          current_environment: "{{ target_environment }}"
+          current_host: "{{ target_host }}"
+
+        new_project_status_combine_environments_with:
+          host: "{{ target_host }}"
+          services: "{{ hostvars[master_host]['services_created'] }}"
+
+    - set_fact:
+        new_project_status: "{{ hostvars[master_host]['project_status'] | combine(hostvars[master_host]['new_project_status_combine_with']) }}"
+
+    - set_fact:
+        new_project_status: "{{ hostvars[master_host]['new_project_status']
+          | combine({'environments': (
+            hostvars[master_host]['new_project_status']['environments'] | combine({target_environment: hostvars[master_host]['new_project_status_combine_environments_with']})
+          )}) }}"
+
+    - debug:
+        var: hostvars[master_host]['new_project_status']
+
+    - name: Save project status file
+      copy:
+        content: "{{ hostvars[master_host]['new_project_status'] | to_yaml }}"
+        dest: "{{ project_status_file_path }}"
+        owner: "{{ deployment_user_obj.uid }}"
+        group: "{{ deployment_user_obj.uid }}"
+      become: yes

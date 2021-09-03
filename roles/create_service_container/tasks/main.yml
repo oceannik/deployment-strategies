@@ -6,13 +6,13 @@
       "OCEANNIK_DEBUG_PARAMS": '{"OCEANNIK_DEPLOYMENT_STRATEGY": "{{ OCEANNIK_DEPLOYMENT_STRATEGY | string }}"}'
 
 - name: Stop the container if it already exists
-  docker_container:
+  community.docker.docker_container:
     name: '{{ service_container_name }}'
     state: absent
   become: yes
 
 - name: Start containers
-  docker_container:
+  community.docker.docker_container:
     name: "{{ service_container_name }}"
     image: "{{ service_config['container']['image'] }}"
     pull: yes
@@ -30,8 +30,11 @@
   register: service_container_inspection
   become: yes
 
+- debug:
+    var: service_container_inspection
+
 - set_fact:
-    service_container_inspection_ports_config: "{{ service_container_inspection.ansible_facts.docker_container['NetworkSettings']['Ports'] }}"
+    service_container_inspection_ports_config: "{{ service_container_inspection.container['NetworkSettings']['Ports'] }}"
 
 - name: Display port bindings for the created service container
   debug:
@@ -42,7 +45,9 @@
       "ports": "{{ service_container_inspection_ports_config }}"
 
 - set_fact:
-    services_created: "{{ services_created | combine({service_name: service_container_inspection_partial_config}) }}"
+    services_created: "{{ hostvars[master_host]['services_created'] | combine({service_name: service_container_inspection_partial_config}) }}"
+  delegate_to: "{{ master_host }}"
+  delegate_facts: true
 
 - debug:
-    var: services_created
+    var: hostvars[master_host]['services_created']

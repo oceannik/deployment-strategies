@@ -16,8 +16,8 @@
     lstrip_blocks : true
   vars:
     service_container_upstream_name: "{{ resource_prefix }}_{{ service_name }}_container_upstream"
-    service_container_host_port: "{{ services_created[service_name]['ports'][container_port][0]['HostPort'] }}"
-    tls_enabled: "{{ service_config['publish']['tls']['enabled'] | default(true) }}"
+    service_container_host_port: "{{ hostvars[master_host]['services_created'][service_name]['ports'][container_port][0]['HostPort'] }}"
+    tls_enabled: "{{ service_tls_enabled }}"
 
 - name: Enable the nginx site by creating a symbolic link
   file:

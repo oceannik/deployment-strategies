@@ -1,6 +1,6 @@
 ---
 - name: Setup the system
-  hosts: oceannik_master, oceannik_nodes
+  hosts: oceannik_master, oceannik_workers
   gather_facts: yes
   become: true
 

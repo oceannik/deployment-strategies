@@ -10,8 +10,14 @@
 To install all the required collections, issue the following command:
 
 ```
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy install -r requirements.yml
 ```
+
+If the collections fail to install, make sure that you're running an up-to-date version of ansible.
+
+## Tested versions
+
+The playbooks were tested on `ansible-core` version `2.11.4`.
 
 ## Roles
 
@@ -41,6 +47,7 @@ Creates the container network for services to be deployed in the new environment
 ### create_service_container
 
 Configures and starts the container as defined in the `oceannik.yml` service configuration file. Inspects the created container so it can fetch the randomly assigned host ports to the published container ports. Saves information about the created services and their configuration that will then later be used to create a project status file.
+
 ### configure_service_tls 
 
 Checks available SSL/TLS certificates for a domain name set by the user. If certificates do not exist yet, and the user has agreed to generate them in `oceannik.yml`, proceeds with generating by configuring *certbot*. *certbot* then obtains certificates from Let's Encrypt.
@@ -48,3 +55,8 @@ Checks available SSL/TLS certificates for a domain name set by the user. If cert
 ### configure_service_access
 
 Fetches the port of the service's container, generates a new nginx config file for the service and checks the syntax of the created config file. This role allows the container to be exposed to the Internet under a domain set by the user. Depending on the user configuration, the container will be hosted using *https*, or *http* only.
+
+### check_service_status
+
+Checks whether the published service container is active by sending an HTTP GET request checking whether the returned status code was 200.
+This check is performed 6 times with a delay of 5 seconds, which means that the application has 30 seconds to get configured.

@@ -1,7 +1,8 @@
 ---
 - name: Start deployment
-  hosts: oceannik_master, oceannik_nodes
+  hosts: oceannik_master, oceannik_workers
   gather_facts: yes
+  any_errors_fatal: yes
 
   vars_files:
     - vars/schema.yml
@@ -19,16 +20,18 @@
     - name: Display Oceannik settings
       debug:
         var: "{{ item }}"
+      run_once: true
       loop:
         - OCEANNIK_SERVICE_CONFIG_PATH
         - OCEANNIK_DEPLOYMENT_STRATEGY
         - OCEANNIK_PROJECT_ID
         - OCEANNIK_PROJECT_NAME
 
-    - name: Check if an Oceannik service configuration file exists
+    - name: Check if Oceannik service configuration file exists
       local_action:
         module: stat
         path: "{{ OCEANNIK_SERVICE_CONFIG_PATH }}"
+      run_once: true
       register: service_config_path
 
     - name: Include the service configuration under the OCEANNIK variable
@@ -37,19 +40,43 @@
         name: OCEANNIK
       when: service_config_path.stat.exists
 
-    - name: Fail the playbook if service configuration is not given
-      fail:
-        msg: >
-          Please provide a path to the `oceannik.yml` service configuration file using the OCEANNIK_SERVICE_CONFIG_PATH
-          environment variable, or put the file directly in the `user-provided/` directory.
-      when: not service_config_path.stat.exists
+    - name: Verify required parameters
+      run_once: true
+      block:
+        - name: Fail the playbook if service configuration is not given
+          fail:
+            msg: >
+              Please provide a path to the `oceannik.yml` service configuration file using the OCEANNIK_SERVICE_CONFIG_PATH
+              environment variable, or put the file directly in the `user-provided/` directory.
+          when: not service_config_path.stat.exists
 
-    - name: Display imported Oceannik service configuration file
-      debug:
-        var: OCEANNIK
+        - name: Display imported Oceannik service configuration file
+          debug:
+            var: OCEANNIK
+
+        - name: Assert that there is only one Master Node
+          assert:
+            that:
+              - groups[INVENTORY_CONFIG.master_group_name] | length == 1
+
+        - name: Assert that there is at least one Worker Node
+          assert:
+            that:
+              - groups[INVENTORY_CONFIG.workers_group_name] | length > 0
+
+    - name: Inform all hosts about the Master Node
+      set_fact:
+        master_host: "{{ groups[INVENTORY_CONFIG.master_group_name][0] }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
 
     - name: Preconfigure the hosts
       include_role:
         name: preconfigure_hosts
+
+    - name: Set the path to the project status file
+      set_fact:
+        project_status_file_path: "{{ project_dir }}/{{ project_status_file_name }}"
 
     - import_tasks: strategies/{{ OCEANNIK_DEPLOYMENT_STRATEGY }}.yml

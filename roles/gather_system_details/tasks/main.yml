@@ -17,9 +17,6 @@
     - "{{ project_dir }}"
   become: yes
 
-- set_fact:
-    project_status_file_path: "{{ project_dir }}/{{ project_status_file_name }}"
-
 - name: Attempt to check the status file for the project
   stat:
     path: "{{ project_status_file_path }}"
@@ -33,11 +30,15 @@
 - name: (if file exists) save the contents of the file to project_status
   set_fact:
     project_status: "{{ project_status_file_output_text.stdout | from_yaml }}"
+  delegate_to: "{{ master_host }}"
+  delegate_facts: true
   when: project_status_file.stat.exists
 
 - name: (if the file does not exist) Assume a fresh deployment
   set_fact:
     project_status: "{{ PROJECT_STATUS_FRESH_FILE }}"
+  delegate_to: "{{ master_host }}"
+  delegate_facts: true
   when: not project_status_file.stat.exists
 
 - debug:
